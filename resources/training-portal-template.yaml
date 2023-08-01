@@ -1,0 +1,27 @@
+#@ load("@ytt:data", "data")
+---
+apiVersion: learningcenter.tanzu.vmware.com/v1beta1
+kind: TrainingPortal
+metadata:
+  name: tap-workshop-env
+  annotations:
+    kapp.k14s.io/update-strategy: always-replace
+spec:
+  portal:
+    title: Workshop environment for VMware Tanzu Application Platform
+    password: #@ data.values.training_portal_password
+    registration:
+      type: anonymous
+    ingress:
+        hostname: tap-workshop-env
+    updates:
+      workshop: true
+    sessions:
+      maximum: 10
+    reserved: 0
+  workshops:
+    - name: tap-workshop-env
+      capacity: 10
+      reserved: 1
+      expires: 8h
+      orphaned: 1h

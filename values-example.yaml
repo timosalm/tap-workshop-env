@@ -1,0 +1,9 @@
+#@data/values
+---
+container_registry:
+  hostname: harbor.example.com
+  username: 
+  password: 
+training_portal_password: 
+tap:
+  ingress_domain: tap.example.com

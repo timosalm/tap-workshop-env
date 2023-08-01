@@ -1,0 +1,196 @@
+#@ load("@ytt:data", "data")
+#@ load("@ytt:base64", "base64")
+#@ load("@ytt:json", "json")
+---
+apiVersion: learningcenter.tanzu.vmware.com/v1beta1
+kind: Workshop
+metadata:
+  name: tap-workshop-env
+spec:
+  title: Workshop environment for VMware Tanzu Application Platform
+  description: A workshop environment to discover the capabilities of VMware Tanzu Application Platform.
+  vendor: tanzu.vmware.com
+  difficulty: beginner
+  duration: 60m
+  url: https://github.com/timosalm/tap-workshop-env
+  content:
+    files: github.com/timosalm/tap-workshop-env
+  session:
+    namespaces:
+      budget: custom
+      role: view
+    applications:
+      terminal:
+        enabled: true
+        layout: split
+      console:
+        enabled: true
+      editor:
+        enabled: true
+    env: 
+    - name: TAP_INGRESS
+      value: #@ data.values.tap.ingress_domain
+    objects:
+    # Install grype
+    - apiVersion: packaging.carvel.dev/v1alpha1
+      kind: PackageInstall
+      metadata:
+        name: $(session_namespace)-grype
+        namespace: tap-install
+      spec:
+        serviceAccountName: tap-install-sa
+        packageRef:
+          refName: grype.scanning.apps.tanzu.vmware.com
+          versionSelection:
+            constraints: ">=0.0.0"
+            prereleases:
+              identifiers: [beta, build]
+        values:
+        - secretRef:
+            name: $(session_namespace)-grype-values
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: $(session_namespace)-grype-values
+        namespace: tap-install
+      stringData:
+        values.yaml: |
+          ---
+          namespace: $(session_namespace)
+          targetImagePullSecret: registry-credentials
+    # Permissions for workshop session
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: $(session_namespace)-session-cr
+      rules:
+      - apiGroups: [services.apps.tanzu.vmware.com]
+        resources: [clusterinstanceclasses]
+        verbs: [get, list, claim]  
+      - apiGroups: [carto.run]
+        resources: ["*"]
+        verbs: [get, list] 
+      - apiGroups: [kpack.io]
+        resources: ["*"]
+        verbs: [get, list]  
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: $(session_namespace)-session-rb
+        namespace: $(session_namespace)
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: $(session_namespace)-session-cr
+      subjects:
+        - kind: ServiceAccount
+          namespace: $(workshop_namespace)
+          name: $(service_account)
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: $(session_namespace)-session
+        namespace: $(session_namespace)
+      rules:
+      - apiGroups: ['*']
+        resources: ['*']
+        verbs: ['*']
+      - apiGroups: [""]
+        resources: [namespaces, serviceaccounts]
+        verbs: [patch]
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: $(session_namespace)-session-rb
+        namespace: $(session_namespace)
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: $(session_namespace)-session
+      subjects:
+        - kind: ServiceAccount
+          namespace: $(workshop_namespace)
+          name: $(service_account)
+    # Resources
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registry-credentials
+      type: kubernetes.io/dockerconfigjson
+      data:
+        #@ docker_creds = {"username": data.values.container_registry.username, "password": data.values.container_registry.password}
+        .dockerconfigjson: #@ base64.encode(json.encode({"auths": {data.values.container_registry.hostname: docker_creds}}))
+    - apiVersion: tekton.dev/v1beta1
+      kind: Pipeline
+      metadata:
+        name: developer-defined-tekton-pipeline
+        labels:
+          apps.tanzu.vmware.com/pipeline: test     # (!) required
+      spec:
+        params:
+          - name: source-url                       # (!) required
+          - name: source-revision                  # (!) required
+          - name: source-sub-path
+            default: "."
+        tasks:
+          - name: test
+            params:
+              - name: source-url
+                value: $(params.source-url)
+              - name: source-revision
+                value: $(params.source-revision)
+              - name: source-sub-path
+                value: $(params.source-sub-path)
+            taskSpec:
+              params:
+                - name: source-url
+                - name: source-revision
+                - name: source-sub-path
+              steps:
+                - name: test
+                  image: gradle
+                  script: |-
+                    cd `mktemp -d`
+
+                    wget -qO- $(params.source-url) | tar xvz -m
+                    cd $(params.source-sub-path)
+                    ./mvnw test
+    - apiVersion: scanning.apps.tanzu.vmware.com/v1beta1
+      kind: ScanPolicy
+      metadata:
+        name: scan-policy
+      spec:
+        regoFile: |
+          package main
+
+          # Accepted Values: "Critical", "High", "Medium", "Low", "Negligible", "UnknownSeverity"
+          notAllowedSeverities := ["UnknownSeverity"]
+          ignoreCves := []
+
+          contains(array, elem) = true {
+            array[_] = elem
+          } else = false { true }
+
+          isSafe(match) {
+            severities := { e | e := match.ratings.rating.severity } | { e | e := match.ratings.rating[_].severity }
+            some i
+            fails := contains(notAllowedSeverities, severities[i])
+            not fails
+          }
+
+          isSafe(match) {
+            ignore := contains(ignoreCves, match.id)
+            ignore
+          }
+
+          deny[msg] {
+            comps := { e | e := input.bom.components.component } | { e | e := input.bom.components.component[_] }
+            some i
+            comp := comps[i]
+            vulns := { e | e := comp.vulnerabilities.vulnerability } | { e | e := comp.vulnerabilities.vulnerability[_] }
+            some j
+            vuln := vulns[j]
+            ratings := { e | e := vuln.ratings.rating.severity } | { e | e := vuln.ratings.rating[_].severity }
+            not isSafe(vuln)
+            msg = sprintf("CVE %s %s %s", [comp.name, vuln.id, ratings])
+          }
