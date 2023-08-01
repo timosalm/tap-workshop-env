@@ -1,0 +1,24 @@
+apiVersion: carto.run/v1alpha1
+kind: Workload
+metadata:
+  labels:
+    app.kubernetes.io/part-of: inclusion
+    apps.tanzu.vmware.com/has-tests: "true"
+    apps.tanzu.vmware.com/workload-type: web
+  name: inclusion
+spec:
+  build:
+    env:
+    - name: BP_JVM_VERSION
+      value: "17"
+  source:
+    git:
+      ref:
+        branch: main
+      url: https://github.com/timosalm/emoji-inclusion.git
+#  serviceClaims:
+#  - name: db
+#    ref:
+#      apiVersion: services.apps.tanzu.vmware.com/v1alpha1
+#      kind: ClassClaim
+#      name: my-claim

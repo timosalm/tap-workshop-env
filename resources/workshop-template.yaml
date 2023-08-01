@@ -15,6 +15,7 @@ spec:
   url: https://github.com/timosalm/tap-workshop-env
   content:
     files: github.com/timosalm/tap-workshop-env
+    image: ghcr.io/timosalm/tap-workshop-env:main
   session:
     namespaces:
       budget: custom

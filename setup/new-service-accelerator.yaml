@@ -1,0 +1,12 @@
+apiVersion: accelerator.apps.tanzu.vmware.com/v1alpha1
+kind: Accelerator
+metadata:
+  name: new-service
+  namespace: accelerator-system
+spec:
+  git:
+    gitImplementation: go-git
+    ref:
+      branch: main
+    subPath: 15-factors-microservice/accelerator
+    url: https://github.com/timosalm/tap-accelerators.git

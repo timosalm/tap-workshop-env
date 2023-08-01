@@ -34,7 +34,7 @@ RUN curl -L -o /usr/local/bin/kp https://github.com/vmware-tanzu/kpack-cli/relea
   chmod 755 /usr/local/bin/kp
 
 # Utilities
-RUN apt-get update && apt-get install -y unzip moreutils
+RUN apt-get update && apt-get install -y unzip moreutils openjdk-17-jdk
 
 RUN chown -R eduk8s:users /home/eduk8s/.config
 
