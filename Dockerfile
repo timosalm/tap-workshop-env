@@ -10,7 +10,7 @@ RUN curl -fsSL https://packages.vmware.com/tools/keys/VMWARE-PACKAGING-GPG-RSA-K
 RUN echo "deb [signed-by=/etc/apt/keyrings/tanzu-archive-keyring.gpg] https://storage.googleapis.com/tanzu-cli-os-packages/apt tanzu-cli-jessie main" | sudo tee /etc/apt/sources.list.d/tanzu.list
 RUN apt-get update
 RUN apt-get install -y tanzu-cli 
-RUN tanzu plugin install --group vmware-tap/default:v1.6.1
+RUN yes | tanzu plugin install --group vmware-tap/default:v1.6.1
 
 # Install Tanzu Dev Tools
 ADD tanzu-vscode-extension.vsix /tmp
