@@ -7,3 +7,7 @@ container_registry:
 training_portal_password: 
 tap:
   ingress_domain: tap.example.com
+gitops:
+  host: https://github.com
+  username: user
+  password: ""
